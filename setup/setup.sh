@@ -18,6 +18,8 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/common.sh"
 source "$VSETUP_ROOT/lib/swift.sh"
 # shellcheck disable=SC1091
 source "$VSETUP_ROOT/lib/packages.sh"
+# shellcheck disable=SC1091
+source "$VSETUP_ROOT/lib/imobiledevice.sh"
 
 VSETUP_ASSUME_YES=${VSETUP_ASSUME_YES:-0}
 VSETUP_PHASE=all
@@ -71,15 +73,47 @@ pkg_feeds() {
       sudo dnf install -y "${FEDORA_PKGS[@]}" ;;
     debian)
       sudo apt-get update
-      local extra=() missing=() p
+      local extra=() missing=() pkgs=() p imd_src=0 kver
+      kver=$(uname -r)
       for p in "${DEBIAN_PKGS[@]}"; do [ -n "$(apt-cache madison "$p" 2>/dev/null)" ] || missing+=("$p"); done
-      [ ${#missing[@]} = 0 ] || die "this release has no ${missing[*]}: vphone-cli's restore code links
-     libimobiledevice 1.4, libimobiledevice-glue and libtatsu. Use Debian 13+ or Ubuntu 25.04+."
-      # Debian packages usbip; Ubuntu ships it in linux-tools (linked below).
-      if [ -n "$(apt-cache madison usbip 2>/dev/null)" ]; then extra+=(usbip); else extra+=(linux-tools-generic); fi
+      # Ubuntu 24.04 and its derivatives (Linux Mint 22.x...) lack only the libimobiledevice 1.4
+      # stack: build that from source (setup/lib/imobiledevice.sh) and install the rest. Their
+      # binutils still contains gold (Debian 13 / Ubuntu 25.04 split it into binutils-gold).
+      local skip=()
+      for p in "${missing[@]}"; do
+        if [[ " ${DEBIAN_IMD_PKGS[*]} " == *" $p "* ]]; then imd_src=1
+        elif [ "$p" = binutils-gold ]; then skip+=("$p")
+        else die "this release has no ${missing[*]}: vphone-cli's restore code links
+     libimobiledevice 1.4, libimobiledevice-glue and libtatsu. Use Debian 13+, Ubuntu 24.04+ or Linux Mint 22+."
+        fi
+      done
+      [ "$imd_src" = 0 ] || log " The libimobiledevice 1.4 stack is not packaged here: it will be built from source"
+      for p in "${DEBIAN_PKGS[@]}"; do
+        # with a source-built stack, leave out the distro's older -dev packages, whose headers
+        # and .so links would mix with it
+        [ "$imd_src" = 1 ] && [[ " ${DEBIAN_IMD_PKGS[*]} " == *" $p "* ]] && continue
+        [[ " ${skip[*]} " == *" $p "* ]] && continue
+        pkgs+=("$p")
+      done
+      [ "$imd_src" = 0 ] || pkgs+=("${DEBIAN_IMD_BUILD_PKGS[@]}")
+      # Debian packages usbip; Ubuntu ships it in linux-tools (linked below). The running
+      # kernel's own linux-tools/headers when the archive still has them: on a live USB session
+      # (Mint, Ubuntu) the -generic metapackage points at a newer kernel than the one booted.
+      if [ -n "$(apt-cache madison usbip 2>/dev/null)" ]; then extra+=(usbip)
+      elif [ -n "$(apt-cache madison "linux-tools-$kver" 2>/dev/null)" ]; then extra+=("linux-tools-$kver")
+      else extra+=(linux-tools-generic); fi
       # WSL: tools/wsl-kernel-tree.sh builds Microsoft's kernel source instead of headers.
-      if is_wsl; then extra+=(gcc-13 cpio dwarves); else extra+=(linux-headers-generic); fi
-      sudo apt-get install -y "${DEBIAN_PKGS[@]}" "${extra[@]}"
+      if is_wsl; then extra+=(gcc-13 cpio dwarves)
+      elif [ -n "$(apt-cache madison "linux-headers-$kver" 2>/dev/null)" ]; then extra+=("linux-headers-$kver")
+      else
+        extra+=(linux-headers-generic)
+        [ -e "/lib/modules/$kver/build" ] ||
+          warn "the archive has no linux-headers-$kver (the running kernel): linux-apfs-rw cannot be
+     built, and creating a VM needs it. Boot a kernel whose headers are available (a newer ISO,
+     or an installed system), or create the VM elsewhere and bring it in with tools/import-vm.sh."
+      fi
+      sudo apt-get install -y "${pkgs[@]}" "${extra[@]}"
+      [ "$imd_src" = 0 ] || imd_install
       # Ubuntu's /usr/bin/usbip only runs linux-tools for the running kernel, which is never
       # installed on WSL or a custom kernel: link the newest one instead.
       usbip version >/dev/null 2>&1 || {
@@ -131,17 +165,17 @@ do_phase deps && {
 
   # rustup (reims-vgpu) — its own pins come from rust-toolchain.toml
   # shellcheck disable=SC1091  # rustup's env file, outside this checkout
-  if ! have cargo && [ -r "$HOME/.cargo/env" ]; then . "$HOME/.cargo/env"; fi
+  if ! have cargo && [ -r "${CARGO_HOME:-$HOME/.cargo}/env" ]; then . "${CARGO_HOME:-$HOME/.cargo}/env"; fi
   if ! have cargo; then
     log " Installing rustup"
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
     # shellcheck disable=SC1091  # rustup's env file, outside this checkout
-    . "$HOME/.cargo/env"
+    . "${CARGO_HOME:-$HOME/.cargo}/env"
   fi
   # Arch's rustup package puts cargo in /usr/bin and writes no ~/.cargo/env, so
   # `cargo install` binaries (rcodesign) are found only with ~/.cargo/bin on PATH.
-  if [ -d "$HOME/.cargo/bin" ] && [[ ":$PATH:" != *":$HOME/.cargo/bin:"* ]]; then
-    PATH=$HOME/.cargo/bin:$PATH
+  if [ -d "${CARGO_HOME:-$HOME/.cargo}/bin" ] && [[ ":$PATH:" != *":${CARGO_HOME:-$HOME/.cargo}/bin:"* ]]; then
+    PATH=${CARGO_HOME:-$HOME/.cargo}/bin:$PATH
   fi
   if ! have rcodesign; then
     log " Installing rcodesign (apple-codesign)"

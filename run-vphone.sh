@@ -13,7 +13,8 @@
 #      TOOLBAR=0 for none), REIMS_VGPU_WINDOW_CONTROL to override its control socket, LOG (-D file),
 #      DFLAGS (-d flags), TRACE (-trace pattern), GDB=<port> to wait for gdb,
 #      CID (vsock context ID, default 3; unique per running VM; 0 = no vsock),
-#      VSOCK (uds | vhost: vsock datapath, see below), VSOCK_DIR (uds sockets).
+#      VSOCK (uds | vhost: vsock datapath, see below), VSOCK_DIR (uds sockets),
+#      NET (empty | user | none), REQUIRE_VPN=1 (guest network only through a host VPN; see below).
 #
 # vphoned listens on vsock port 1339 in the guest (vphone-cli's control
 # channel); from the host: tools/vphoned.sh (either datapath), or with VSOCK=vhost
@@ -158,6 +159,42 @@ export QEMU_TLB_UNSYNCED=${QEMU_TLB_UNSYNCED:-2}
 # Bit n = xHCI port n; 0x1fe = every port. VPHONE_XHCI_NONREMOVABLE=0 restores QEMU's default.
 export VPHONE_XHCI_NONREMOVABLE=${VPHONE_XHCI_NONREMOVABLE:-0x1fe}
 args+=(-display none)
+
+# Guest network. The vresearch101 machine turns each -nic into a virtio-net PCI device (the
+# guest's VZVirtioNetworkDevice). With no network option, QEMU's default is one user-mode (slirp)
+# NIC: NAT through QEMU's own sockets, so the guest's traffic leaves as this host's traffic and
+# follows the host's routes -- through a host VPN (Surfshark, WireGuard, OpenVPN) when one is up.
+#  NET=        (default) QEMU's default NIC, as before
+#  NET=user    an explicit user-mode NIC (id vnet0; NET_OPTS appends options, e.g. hostfwd=...)
+#  NET=none    no network at all
+# REQUIRE_VPN=1 is a kill switch for the guest: the VM does not start unless the host's default
+# route goes through a VPN interface (tools/surfshark.sh check), and tools/vpn-guard.py takes the
+# guest's link down whenever the VPN drops and back up when it returns. It implies NET=user, with
+# IPv6 off (a VPN that carries only IPv4 would otherwise leak the guest's IPv6 traffic).
+NET=${NET-}
+if [ "${REQUIRE_VPN:-0}" = 1 ]; then
+  [ "$NET" != none ] || { echo "run-vphone.sh: REQUIRE_VPN=1 with NET=none: nothing to guard" >&2; exit 1; }
+  NET=user
+  here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+  if ! "$here/tools/surfshark.sh" check; then
+    echo "run-vphone.sh: REQUIRE_VPN=1 and the host's traffic does not go through a VPN: not starting." >&2
+    echo "  Connect first (tools/surfshark.sh up, or the Surfshark app), or drop REQUIRE_VPN." >&2
+    exit 1
+  fi
+  vpn_qmp=${XDG_RUNTIME_DIR:-/tmp}/vphone-vpn-guard-$$.sock
+  rm -f "$vpn_qmp"
+  args+=(-qmp "unix:$vpn_qmp,server=on,wait=off")
+  python3 "$here/tools/vpn-guard.py" --qmp "$vpn_qmp" --netdev vnet0 &
+fi
+case $NET in
+  '') ;;
+  none) args+=(-nic none) ;;
+  user)
+    nic="user,id=vnet0,model=virtio-net-pci"
+    [ "${REQUIRE_VPN:-0}" = 1 ] && nic+=",ipv6=off"
+    args+=(-nic "$nic${NET_OPTS:+,$NET_OPTS}") ;;
+  *) echo "run-vphone.sh: NET must be empty, user or none (got '$NET')" >&2; exit 1 ;;
+esac
 
 # Virtualization.framework's VZVirtioSocketDevice is virtio-vsock. Two datapaths:
 #  VSOCK=uds   QEMU's own (virtio-vsock-uds-pci). Host side: a Unix socket $VSOCK_DIR/$CID.sock

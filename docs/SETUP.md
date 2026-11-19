@@ -95,8 +95,12 @@ sudo apt-get install git gcc g++ clang lld binutils make cmake ninja-build meson
   linux-headers-generic usbip        # Ubuntu: linux-tools-generic in place of usbip
 ```
 
-Ubuntu 24.04 and other older releases have no `libimobiledevice-glue` or `libtatsu` and an older
-libimobiledevice than the 1.4 that vphone-cli's restore code links; use a newer release.
+Ubuntu 24.04 and what is built on it (Linux Mint 22.x) have no `libimobiledevice-glue` or
+`libtatsu` and an older libimobiledevice than the 1.4 that vphone-cli's restore code links (and
+their `binutils` already contains gold, so there is no `binutils-gold`). `setup.sh` leaves out
+`libplist-dev libimobiledevice-glue-dev libusbmuxd-dev libtatsu-dev libimobiledevice-dev` there
+and builds those five libraries from their release tarballs into `/usr/local`
+(`setup/lib/imobiledevice.sh`). For a Mint live USB, see [MINT-LIVE.md](MINT-LIVE.md).
 
 On Arch Linux and Omarchy (and CachyOS, EndeavourOS, Manjaro...), with the system up to date first
 (`sudo pacman -Syu`, or `omarchy update` on Omarchy; reboot if the kernel was updated):

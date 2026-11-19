@@ -258,6 +258,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: First-boot QMP launcher regression (no VM)
         run: bash setup/test/first-boot-qmp.sh
+      - name: Guest network and VPN kill-switch arguments (no VM)
+        run: bash setup/test/run-vphone-net.sh
       - name: Install the suite's dependencies
         run: |
           sudo apt-get update

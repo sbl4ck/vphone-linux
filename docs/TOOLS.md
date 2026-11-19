@@ -19,6 +19,8 @@ Common arguments:
 |---|---|---|
 | `check-host.sh` | `tools/check-host.sh` | Checks this PC against the requirements in SETUP.md (CPU, RAM, `/dev/shm`, Vulkan GPU, `/dev/vhost-vsock`, `vm.max_map_count`, Rust, meson). Changes nothing. |
 | `omarchy-window.sh` | `tools/omarchy-window.sh [--remove]` | Omarchy/Hyprland: adds a window rule (`~/.config/hypr/vphone-linux.lua`) so the iPhone window floats centred at its own shape instead of being tiled. `--remove` takes it out. |
+| `surfshark.sh` | `tools/surfshark.sh import FILE [NAME]` · `up [NAME]` · `down [NAME]` · `status` · `check [-q]` | Adds Surfshark WireGuard/OpenVPN configs to NetworkManager and connects them; `check` exits 0 only when the host's default route goes through a VPN interface (any VPN). See [MINT-LIVE.md](MINT-LIVE.md#surfshark-vpn). |
+| `vpn-guard.py` | started by `run-vphone.sh` with `REQUIRE_VPN=1` | Takes the guest's NIC link down over QMP whenever `surfshark.sh check` fails, and back up when the VPN returns. |
 | `import-vm.sh` | `tools/import-vm.sh SOURCE NAME` | Copies a vphone-cli VM (a local path or `user@mac:path` over ssh) into `vms/NAME`, sparse, writes its `ecid` file and keeps a `vms/NAME.pristine` copy. |
 
 `../build.sh` builds the submodules and QEMU (see [SETUP.md](SETUP.md#3-build)).

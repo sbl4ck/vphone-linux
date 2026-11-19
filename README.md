@@ -52,9 +52,11 @@ Linux distributions `setup/setup.sh` supports, and how far each was tested:
 | Arch Linux, Omarchy | setup, the whole build, and a VM created through the CFW install (Omarchy 4.0.4 in a VM); `tools/omarchy-window.sh` floats the iPhone window under Hyprland |
 | Debian 13, Ubuntu 25.04+ | setup + vphone-cli build in clean Debian 13 and Ubuntu 26.04 containers |
 | Windows 11 (WSL2, Ubuntu) | the iPhone boots, rendered on lavapipe ([docs/WSL.md](docs/WSL.md)) |
+| Linux Mint 22.x, Ubuntu 24.04 (incl. a Mint live USB) | the libimobiledevice 1.4 libraries are built from source; that build is tested on Ubuntu 24.04, the rest is not yet ([docs/MINT-LIVE.md](docs/MINT-LIVE.md)) |
 
 Every list of packages is checked against Fedora 43/44, Debian 13, Ubuntu 25.10/26.04 and Arch by
-CI. Ubuntu 24.04 is too old (no libimobiledevice-glue or libtatsu).
+CI. On Ubuntu 24.04 and Mint 22, which do not package libimobiledevice-glue or libtatsu,
+`setup.sh` builds the libimobiledevice 1.4 stack from source.
 
 Tested guest pairings on Linux:
 
@@ -179,6 +181,7 @@ instead. The step-by-step manual path, with the packages and every command, is
 | [docs/APP-DEVELOPMENT.md](docs/APP-DEVELOPMENT.md) | Developing iOS apps on Linux with xtool: build, run in the VM, read the log, iterate |
 | [docs/CREATE-ON-MAC.md](docs/CREATE-ON-MAC.md) | Optional: creating the VM with vphone-cli on a Mac and copying it over |
 | [docs/WSL.md](docs/WSL.md) | Running on Windows 11 under WSL2: what differs (lavapipe, the kernel tree for APFS) and the one-time setup |
+| [docs/MINT-LIVE.md](docs/MINT-LIVE.md) | Running from a Linux Mint live USB (a data drive, reboots), and the guest's traffic through Surfshark (or any VPN) with a kill switch |
 | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Known problems and fixes |
 | [docs/ADVANCED.md](docs/ADVANCED.md) | Building by hand, display scale, services, GPU clocks |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the machine model, SEP, GIC, USB touch, vsock and the GPU path fit together |

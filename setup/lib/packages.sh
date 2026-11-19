@@ -20,8 +20,9 @@ FEDORA_PKGS=(git gcc gcc-c++ clang lld binutils make cmake ninja-build meson
 
 # Debian 13+, Ubuntu 25.04+, Mint... setup.sh adds usbip where the distro packages it (Debian), or
 # linux-tools-generic where it ships it instead (Ubuntu), and linux-headers-generic (or WSL's
-# kernel-build tools). Older releases (Ubuntu 24.04) have no libimobiledevice-glue or libtatsu
-# and a libimobiledevice older than the 1.4 vphone-cli's restore code links: setup.sh stops there. binutils-gold, zip,
+# kernel-build tools). Ubuntu 24.04 (and Mint 22) have no libimobiledevice-glue or libtatsu
+# and a libimobiledevice older than the 1.4 vphone-cli's restore code links: setup.sh builds that
+# stack from source there (setup/lib/imobiledevice.sh), and skips binutils-gold (in binutils). binutils-gold, zip,
 # gnupg2, libpython3-dev, libxml2-dev, libncurses-dev and libz3-dev are what swiftly lists for
 # the Swift toolchain; bc, flex, bison and libelf-dev build linux-apfs-rw on WSL's kernel tree.
 DEBIAN_PKGS=(git gcc g++ clang lld binutils make cmake ninja-build meson
