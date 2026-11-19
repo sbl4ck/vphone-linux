@@ -29,6 +29,13 @@ elif command -v vulkaninfo >/dev/null; then
 else warn "vulkaninfo not installed (package vulkan-tools); can't check the GPU"; fi
 [ -r /dev/vhost-vsock ] && [ -w /dev/vhost-vsock ] && pass "/dev/vhost-vsock usable" \
   || warn "/dev/vhost-vsock missing or not read/write for you (sudo modprobe vhost_vsock; see docs/SETUP.md)"
+if grep -qx 0x1002 /sys/class/drm/card[0-9]*/device/vendor 2>/dev/null; then
+  # AMD GPU (or Ryzen APU): reims-vgpu passes the guest's RAM to RADV as udmabuf dma-bufs
+  ls /usr/share/vulkan/icd.d/radeon_icd*.json >/dev/null 2>&1 && pass "AMD GPU with Mesa's RADV" \
+    || warn "AMD GPU but no RADV Vulkan driver (Debian/Ubuntu/Mint: mesa-vulkan-drivers, Arch: vulkan-radeon)"
+  [ -w /dev/udmabuf ] && pass "/dev/udmabuf usable (AMD GPU)" \
+    || warn "/dev/udmabuf missing or not writable for you: an AMD GPU needs it (./setup/setup.sh deps sets it up)"
+fi
 m=$(cat /proc/sys/vm/max_map_count)
 [ "$m" -ge 1048576 ] && pass "vm.max_map_count = $m" || warn "vm.max_map_count = $m; set 1048576 or more (docs/SETUP.md)"
 command -v cargo >/dev/null && pass "Rust (cargo)" || warn "Rust not installed (https://rustup.rs)"

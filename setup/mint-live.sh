@@ -107,15 +107,17 @@ write_env() {
   # itself). A live session has no NVIDIA driver (nouveau's Vulkan cannot import guest memory):
   # lavapipe, which renders on the CPU, always works; Intel and AMD use Mesa's drivers.
   if [ ! -f /usr/share/vulkan/icd.d/nvidia_icd.json ]; then
-    case $(lspci -nn 2>/dev/null | grep -Ei 'vga|3d|display' | head -1) in
-      *'[8086:'*) icd=/usr/share/vulkan/icd.d/intel_icd.x86_64.json ;;
-      *'[1002:'*) icd=/usr/share/vulkan/icd.d/radeon_icd.x86_64.json ;;
-      *)          icd=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json ;;
+    # by PCI vendor, AMD first (a Ryzen APU's Radeon, or a Radeon card next to an Intel iGPU)
+    case " $(cat /sys/class/drm/card[0-9]*/device/vendor 2>/dev/null | tr '\n' ' ' || true) " in
+      *" 0x1002 "*) icd=/usr/share/vulkan/icd.d/radeon_icd.x86_64.json ;;
+      *" 0x8086 "*) icd=/usr/share/vulkan/icd.d/intel_icd.x86_64.json ;;
+      *)            icd=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json ;;
     esac
   fi
   [ -f "$ENV_FILE" ] && return 0      # the user may have edited it: keep it
-  [ -z "$icd" ] || vk="export VK_DRIVER_FILES=\${VK_DRIVER_FILES:-$icd}
-export LP_NUM_THREADS=\${LP_NUM_THREADS:-4}"
+  [ -z "$icd" ] || vk="export VK_DRIVER_FILES=\${VK_DRIVER_FILES:-$icd}"
+  case $icd in *lvp_icd*) vk+="
+export LP_NUM_THREADS=\${LP_NUM_THREADS:-4}" ;; esac
   log " Writing $ENV_FILE"
   cat > "$ENV_FILE" <<EOF
 # vphone-linux settings for this data drive (written by setup/mint-live.sh; edit freely).
@@ -132,6 +134,9 @@ export SWIFTLY_HOME_DIR=$WORK/swiftly
 export PATH=\$CARGO_HOME/bin:\$PATH
 # Guest RAM (QEMU keeps it in /dev/shm, i.e. in this PC's RAM, next to the live session itself).
 export MEM=\${MEM:-$([ "$mem_gb" -ge 24 ] && echo 8G || echo 6G)}
+# Guest vCPUs: 8 by default, fewer on a CPU with under 10 threads (each vCPU is a busy host thread;
+# leave two for the GPU work and the desktop).
+export SMP=\${SMP:-$(n=$(( $(nproc) - 2 )); [ "$n" -gt 8 ] && n=8; [ "$n" -lt 2 ] && n=2; echo "$n")}
 # Vulkan driver (empty: run-vphone.sh / the Vulkan loader decide). lavapipe = CPU rendering.
 $vk
 # 1: the VM boots only with the VPN up and loses its network while the VPN is down.

@@ -116,6 +116,25 @@ PY
       [ -f "$icd" ] && { export VK_DRIVER_FILES=$icd; break; }
     done
   fi
+  # No NVIDIA driver: an AMD GPU (Radeon card, or a Ryzen APU's integrated Radeon) takes Mesa's
+  # RADV, by the GPU's PCI vendor in sysfs (0x1002).
+  gpu_vendors=$(cat /sys/class/drm/card[0-9]*/device/vendor 2>/dev/null | sort -u | tr '\n' ' ' || true)
+  if [ -z "${VK_DRIVER_FILES:-}" ] && [[ " $gpu_vendors " == *" 0x1002 "* ]]; then
+    for icd in /usr/share/vulkan/icd.d/radeon_icd.x86_64.json /usr/share/vulkan/icd.d/radeon_icd.json; do
+      [ -f "$icd" ] && { export VK_DRIVER_FILES=$icd; break; }
+    done
+  fi
+  # RADV will not import the guest's RAM by pointer: reims-vgpu passes it as udmabuf dma-bufs,
+  # and without /dev/udmabuf the guest dies at its first no-copy buffer. Say so now instead.
+  case ${VK_DRIVER_FILES:-} in
+    *radeon*)
+      if ! [ -w /dev/udmabuf ]; then
+        echo "run-vphone.sh: AMD GPU ($VK_DRIVER_FILES) but /dev/udmabuf is $([ -e /dev/udmabuf ] && echo 'not writable for you' || echo missing)." >&2
+        echo "  Fix: ./setup/setup.sh deps (accept the host settings), or for this boot:" >&2
+        echo "       sudo modprobe udmabuf && sudo setfacl -m u:$(id -un):rw /dev/udmabuf" >&2
+        exit 1
+      fi ;;
+  esac
   if [ -z "${VK_DRIVER_FILES:-}" ] && grep -qi microsoft /proc/sys/kernel/osrelease 2>/dev/null; then
     # WSL2 has no native Vulkan driver for the host GPU, only Mesa's dzn (Vulkan on D3D12),
     # which cannot import guest RAM by pointer (VK_EXT_external_memory_host) and has no udmabuf

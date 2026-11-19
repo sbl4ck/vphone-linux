@@ -33,12 +33,28 @@ trees and toolchains, plus about 60 GB per VM. So:
    longer available. `setup.sh` warns when that happens. The fixes are a newer Mint ISO, Mint
    installed on the USB drive (it can then update its kernel), or creating the VM on another Linux PC
    and importing it with `tools/import-vm.sh`. *Running* an existing VM does not need the headers.
-5. **GPU:** a live session has no proprietary NVIDIA driver (installing one needs a reboot, which
-   the live session would forget). `mint-live.sh` points the Vulkan driver at Mesa: Intel's or AMD's
-   driver if that is your GPU, or **lavapipe** (renders on the CPU: slower, but it always works, the
-   same path [WSL](WSL.md) uses) on an NVIDIA GPU. To change it, edit `VK_DRIVER_FILES` in
-   `vphone-env.sh`. NVIDIA's own driver is the only one tested so far. On an installed Mint, install
-   it with Driver Manager.
+5. **GPU:**
+   - **AMD (a Radeon card, or the integrated Radeon in a Ryzen APU):** this uses Mesa's RADV
+     driver, which is already on the live USB (`mesa-vulkan-drivers`). AMD needs one extra thing:
+     RADV refuses to take the guest's memory directly, so reims-vgpu passes it through
+     `/dev/udmabuf`, and **a guest whose QEMU cannot open that device dies at boot**. On Mint the
+     device belongs to the `kvm` group. `setup.sh` (host settings) loads the `udmabuf` module and
+     installs a udev rule that gives the logged-in user access, which works in a live session
+     without logging out again. `run-vphone.sh` stops with the fix if access is still missing.
+     `tools/check-host.sh` checks both. reims-vgpu's developers booted a guest on a Radeon 780M
+     (Ryzen APU) at udmabuf's stock limits. vphone-linux itself has not been run on AMD yet.
+   - **APU memory:** an integrated GPU shares system RAM, so the guest (6-8 GB in `/dev/shm`), the
+     GPU's share, the live session and the builds all come out of the same RAM. Use 32 GB if you can.
+     If the guest gets killed with no message, lower the guest's RAM (`MEM=6G`) or set the iGPU's
+     memory reservation ("UMA frame buffer size") to a small value in the firmware setup.
+   - **CPU:** on AMD, `run-vphone.sh` leaves thread placement to the kernel. The core pinning only
+     applies to Intel's hybrid CPUs. `mint-live.sh` lowers the guest's vCPUs (`SMP`) on CPUs with
+     fewer than 10 threads.
+   - **NVIDIA:** a live session has no proprietary NVIDIA driver (installing one needs a reboot,
+     which the live session would forget), so `mint-live.sh` uses **lavapipe**, which renders on the
+     CPU. It is slower but always works, and it is the same path [WSL](WSL.md) uses. On an installed
+     Mint, install NVIDIA's driver with Driver Manager. That driver is the only one tested so far.
+   - Intel GPUs use Mesa's ANV. To pick another driver, edit `VK_DRIVER_FILES` in `vphone-env.sh`.
 
 ## Steps
 

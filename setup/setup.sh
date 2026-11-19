@@ -152,6 +152,35 @@ host_settings() {
   fi
   [ -e /dev/vhost-vsock ] || sudo modprobe vhost_vsock || true
   if [ -e /dev/vhost-vsock ] && ! [ -w /dev/vhost-vsock ]; then sudo chmod 666 /dev/vhost-vsock; fi
+  udmabuf_settings
+}
+
+# /dev/udmabuf for the user: on an AMD GPU, RADV will not import the guest's RAM (memfd pages)
+# by pointer, so reims-vgpu hands it over as udmabuf dma-bufs, and a QEMU that cannot open the
+# device dies at boot (reims-vgpu docs/qemu.md, "AMD GPUs and udmabuf"). Debian/Ubuntu/Mint
+# give the node to the kvm group, 0660. The rule tags it uaccess: logind then gives the user at
+# the seat access (a live USB session included, no re-login), and kvm membership covers ssh.
+udmabuf_settings() {
+  local rule=/etc/udev/rules.d/70-vphone-udmabuf.rules
+  if ! grep -qsx udmabuf /etc/modules-load.d/*.conf; then
+    echo udmabuf | sudo tee /etc/modules-load.d/vphone-udmabuf.conf >/dev/null
+  fi
+  [ -e /dev/udmabuf ] || sudo modprobe udmabuf 2>/dev/null || true
+  if [ ! -f "$rule" ]; then
+    log " Giving your login /dev/udmabuf (needed by AMD GPUs; $rule)"
+    echo 'KERNEL=="udmabuf", GROUP="kvm", MODE="0660", TAG+="uaccess"' | sudo tee "$rule" >/dev/null
+    sudo udevadm control --reload 2>/dev/null || true
+    sudo udevadm trigger --name-match=udmabuf 2>/dev/null || true
+    sudo udevadm settle 2>/dev/null || true
+  fi
+  if getent group kvm >/dev/null && ! id -nG | tr ' ' '\n' | grep -qx kvm; then
+    sudo usermod -aG kvm "$(id -un)" || true   # from the next login (ssh, scripts)
+  fi
+  if [ -e /dev/udmabuf ] && ! [ -w /dev/udmabuf ]; then
+    # no logind seat (ssh, WSL) and kvm not active until the next login: open it for this boot
+    if command -v setfacl >/dev/null; then sudo setfacl -m "u:$(id -un):rw" /dev/udmabuf
+    else sudo chmod 666 /dev/udmabuf; fi
+  fi
 }
 
 do_phase deps && {
@@ -191,6 +220,9 @@ do_phase deps && {
   [ "$(cat /proc/sys/vm/max_map_count)" -ge 1048576 ] ||
     warn "vm.max_map_count is $(cat /proc/sys/vm/max_map_count): set 1048576 (docs/SETUP.md §2)"
   [ -e /dev/vhost-vsock ] || warn "/dev/vhost-vsock missing: boot with VSOCK=uds, or load vhost_vsock"
+  if [ -e /dev/udmabuf ] && ! [ -w /dev/udmabuf ]; then
+    warn "/dev/udmabuf is not writable for you: an AMD GPU needs it (re-run ./setup/setup.sh deps and accept the host settings)"
+  fi
   # docs/SETUP.md's vhost-vsock access, applied on WSL: without the udev rule a one-off chmod
   # is lost at the next udev event on the device and QEMU fails with "Permission denied".
   if is_wsl && [ ! -e /etc/udev/rules.d/90-vhost-vsock.rules ]; then

@@ -114,7 +114,9 @@ Tested guest pairings on Linux:
   (guest CPU work at emulated speed).
 - Creating the VM needs root for several steps, about 60 GB free disk, and about an hour plus the
   downloads ([docs/CREATE-ON-LINUX.md](docs/CREATE-ON-LINUX.md)).
-- Only the NVIDIA host GPU has been tested. reims-vgpu documents what AMD GPUs need (`/dev/udmabuf`).
+- Only the NVIDIA host GPU has been tested. AMD GPUs (Radeon cards and Ryzen APUs) need `/dev/udmabuf`:
+  `setup.sh` gives it to your login, `run-vphone.sh` selects RADV and checks access
+  ([docs/MINT-LIVE.md](docs/MINT-LIVE.md)).
 - vphoned's `GET /v1/files/content` stops after 64 KiB on the default vhost-vsock datapath; use
   `tools/guest-read.py`, or the `virtio-vsock-uds-pci` device (QEMU branch `vsock-uds`, not merged).
 - reims-vgpu runs in **census mode** by default: a Metal feature it cannot model costs an inexact frame

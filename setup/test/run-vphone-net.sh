@@ -46,4 +46,11 @@ if run REQUIRE_VPN=1 FAKE_DEV=eth0; then fail "REQUIRE_VPN=1 started without a V
 run REQUIRE_VPN=1 FAKE_DEV=wg0 || fail "REQUIRE_VPN=1 refused a WireGuard route"
 grep -Fxq 'user,id=vnet0,model=virtio-net-pci,ipv6=off' "$tmp/qemu-args" || fail "REQUIRE_VPN NIC"
 grep -q '^unix:.*vphone-vpn-guard-.*\.sock,server=on,wait=off$' "$tmp/qemu-args" || fail "REQUIRE_VPN QMP socket"
+# AMD GPU: without a usable /dev/udmabuf the launcher stops before QEMU (the guest would die at boot)
+if ! [ -w /dev/udmabuf ]; then
+  if run GFX=1 MEM=64M FAKE_DEV=eth0 VK_DRIVER_FILES=/usr/share/vulkan/icd.d/radeon_icd.x86_64.json; then
+    fail "AMD GPU started without /dev/udmabuf"
+  fi
+  [ ! -e "$tmp/qemu-args" ] || fail "QEMU ran on an AMD GPU without /dev/udmabuf"
+fi
 echo 'ok: NET and REQUIRE_VPN build the expected network arguments'
